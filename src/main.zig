@@ -10,22 +10,14 @@ pub fn main() !void {
     var stdin_reader = std.fs.File.stdin().reader(&stdin_buf);
     const stdin = &stdin_reader.interface;
 
-    // var contents: []u8 = undefined;
-    // while (true) {
-    //     contents = try stdin.allocRemaining(allocator, .unlimited);
-    //     std.debug.print("{s}\n", .{contents});
-    // }
-    // defer allocator.free(contents);
-    //
+    const body = try readLspBody(allocator, stdin);
 
-    const n = try readLspBody(allocator, stdin);
-
-    std.debug.print("length = {d}", .{n});
+    std.debug.print("length = {s}", .{body});
 }
 
-fn readLspBody(alloc: std.mem.Allocator, reader: *std.Io.Reader) !usize {
+fn readLspBody(alloc: std.mem.Allocator, reader: *std.Io.Reader) ![]u8 {
     var header = try std.ArrayList(u8).initCapacity(alloc, 100);
-    defer header.deinit();
+    defer header.deinit(alloc);
 
     var last4: [4]u8 = .{ 0, 0, 0, 0 };
 
@@ -43,7 +35,9 @@ fn readLspBody(alloc: std.mem.Allocator, reader: *std.Io.Reader) !usize {
         if (header.items.len > 64 * 1024) return error.InvalidHeader;
     }
 
-    return try parseContentLength(header);
+    const n = try parseContentLength(header.items);
+
+    return try reader.take(n);
 }
 
 fn parseContentLength(header: []const u8) !usize {
