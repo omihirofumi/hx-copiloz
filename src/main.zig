@@ -10,9 +10,36 @@ pub fn main() !void {
     var stdin_reader = std.fs.File.stdin().reader(&stdin_buf);
     const stdin = &stdin_reader.interface;
 
-    const body = try readLspBody(allocator, stdin);
+    while (true) {
+        const body = readLspBody(allocator, stdin) catch |e| switch (e) {
+            error.EndOfStream => break,
+            else => return e,
+        };
+        // defer allocator.free(body);
 
-    std.debug.print("length = {s}", .{body});
+        std.log.info("<< {s}\n", .{body});
+
+        const parsed: std.json.Parsed(std.json.Value) = std.json.parseFromSlice(std.json.Value, allocator, body, .{}) catch {
+            std.log.err("parse failed\n", .{});
+            continue;
+        };
+        defer parsed.deinit();
+
+        if (parsed.value != .object) continue;
+        const obj = parsed.value.object;
+
+        const method_v = obj.get("method") orelse continue;
+        if (method_v != .string) continue;
+
+        const id_v = obj.get("id") orelse continue;
+
+        const method = method_v.string;
+        if (!std.mem.eql(u8, method, "initialize")) continue;
+
+        const id = try stringifyValue(allocator, id_v);
+        defer allocator.free(id);
+        std.log.info("id = {s}\n", .{id});
+    }
 }
 
 fn readLspBody(alloc: std.mem.Allocator, reader: *std.Io.Reader) ![]u8 {
@@ -63,6 +90,10 @@ fn parseContentLength(header: []const u8) !usize {
 
     if (!saw_digit) return error.InvalidContentLength;
     return n;
+}
+
+fn stringifyValue(alloc: std.mem.Allocator, v: std.json.Value) ![]const u8 {
+    return std.fmt.allocPrint(alloc, "{f}", .{std.json.fmt(v, .{})});
 }
 
 test "simple test" {
