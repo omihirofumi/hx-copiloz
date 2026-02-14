@@ -67,14 +67,14 @@ pub fn main() !void {
             .result = .{
                 .capabilities = .{
                     .completionProvider = .{
-                        .triggerCharacters = [_][]const u8{"."},
+                        .triggerCharacters = &[_][]const u8{"."},
                     },
                 },
             },
         };
 
-        var buffer: std.ArrayList(u8) = .initCapacity(allocator, 256);
-        defer buffer.deinit();
+        const resp = try std.json.Stringify.valueAlloc(allocator, payload, .{});
+        defer allocator.free(resp);
 
         try stdout.print("Content-Length: {d}\r\n\r\n", .{resp.len});
         try stdout.writeAll(resp);
