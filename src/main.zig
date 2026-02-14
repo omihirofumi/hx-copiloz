@@ -1,6 +1,24 @@
 const std = @import("std");
 const hx_copiloz = @import("hx_copiloz");
 
+const CompletionProvider = struct {
+    triggerCharacters: []const []const u8,
+};
+
+const Capabilities = struct {
+    completionProvider: CompletionProvider,
+};
+
+const Result = struct {
+    capabilities: Capabilities,
+};
+
+const RpcResponse = struct {
+    jsonrpc: []const u8,
+    id: []const u8,
+    result: Result,
+};
+
 pub fn main() !void {
     var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -9,6 +27,10 @@ pub fn main() !void {
     var stdin_buf: [1024]u8 = undefined;
     var stdin_reader = std.fs.File.stdin().reader(&stdin_buf);
     const stdin = &stdin_reader.interface;
+
+    var stdout_buf: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    const stdout = &stdout_writer.interface;
 
     while (true) {
         const body = readLspBody(allocator, stdin) catch |e| switch (e) {
@@ -38,7 +60,25 @@ pub fn main() !void {
 
         const id = try stringifyValue(allocator, id_v);
         defer allocator.free(id);
-        std.log.info("id = {s}\n", .{id});
+
+        const payload: RpcResponse = .{
+            .jsonrpc = "2.0",
+            .id = id,
+            .result = .{
+                .capabilities = .{
+                    .completionProvider = .{
+                        .triggerCharacters = [_][]const u8{"."},
+                    },
+                },
+            },
+        };
+
+        var buffer: std.ArrayList(u8) = .initCapacity(allocator, 256);
+        defer buffer.deinit();
+
+        try stdout.print("Content-Length: {d}\r\n\r\n", .{resp.len});
+        try stdout.writeAll(resp);
+        try stdout.flush();
     }
 }
 
